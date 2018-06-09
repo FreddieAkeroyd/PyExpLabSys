@@ -607,6 +607,35 @@ class SP150(GeneralPotentiostat):
             EClib_dll_path=EClib_dll_path
         )
 
+class SP200(GeneralPotentiostat):
+    """Specific driver for the SP-200 potentiostat"""
+
+    def __init__(self, address, EClib_dll_path=None):
+        """Initialize the SP200 potentiostat driver
+
+        See the __init__ method for the GeneralPotentiostat class for an
+        explanation of the arguments.
+        """
+        super(SP200, self).__init__(
+            type_='KBIO_DEV_SP200',
+            address=address,
+            EClib_dll_path=EClib_dll_path
+        )
+
+class SP300(GeneralPotentiostat):
+    """Specific driver for the SP-300 potentiostat"""
+
+    def __init__(self, address, EClib_dll_path=None):
+        """Initialize the SP300 potentiostat driver
+
+        See the __init__ method for the GeneralPotentiostat class for an
+        explanation of the arguments.
+        """
+        super(SP300, self).__init__(
+            type_='KBIO_DEV_SP300',
+            address=address,
+            EClib_dll_path=EClib_dll_path
+        )
 
 ########## Auxillary classes
 class KBIOData(object):
@@ -1630,6 +1659,153 @@ class SPEIS(Technique):
         )
         super(SPEIS, self).__init__(args, 'seisp.ecc')
 
+# Section 7.12 in the specification
+class PEIS(Technique):
+    """Potentio Electrochemical Impedance Spectroscopy (PEIS)
+    technique class
+
+    The PEIS technique returns data with a different set of fields depending
+    on which process steps it is in. If it is in process step 0 it returns
+    data on the following fields (in order):
+
+    * time (float)
+    * Ewe (float)
+    * I (float)
+
+    If it is in process 1 it returns data on the following fields:
+
+    * freq (float)
+    * abs_Ewe (float)
+    * abs_I (float)
+    * Phase_Zwe (float)
+    * Ewe (float)
+    * I (float)
+    * abs_Ece (float)
+    * abs_Ice (float)
+    * Phase_Zce (float)
+    * Ece (float)
+    * t (float)
+    * Irange (float)   on vmp3
+
+    Which process it is in, can be checked with the ``process`` property on
+    the :class:`.KBIOData` object.
+
+    """
+
+    #:Data fields definition
+    data_fields = {
+        'common': [
+            DataField('Ewe', c_float),
+            DataField('I', c_float),
+        ],
+        'no_time': [
+            DataField('freq', c_float),
+            DataField('abs_Ewe', c_float),
+            DataField('abs_I', c_float),
+            DataField('Phase_Zwe', c_float),
+            DataField('Ewe', c_float),
+            DataField('I', c_float),
+            DataField('Blank0', c_float),
+            DataField('abs_Ece', c_float),
+            DataField('abs_Ice', c_float),
+            DataField('Phase_Zce', c_float),
+            DataField('Ece', c_float),
+            DataField('Blank1', c_float),
+            DataField('Blank2', c_float),
+            DataField('t', c_float),
+            # The manual says this is a float, but playing around with
+            # strongly suggests that it is an uint corresponding to a I_RANGE
+            #DataField('Irange', c_uint32), # only on vmp3
+            # The manual does not mention data conversion for step, but says
+            # that cycle should be an uint, however, this technique does not
+            # have a cycle field, so I assume that it should have been the
+            # step field. Also, the data maskes sense it you interpret it as
+            # an uint.
+        ]
+    }
+
+    def __init__(self,  # pylint: disable=too-many-locals
+                 vs_initial, vs_final, initial_voltage_step,
+                 final_voltage_step, duration_step, step_number,
+                 record_every_dT=0.1, record_every_dI=5E-6,
+                 final_frequency=100.0E3, initial_frequency=100.0,
+                 sweep=True, amplitude_voltage=0.1,
+                 frequency_number=1, average_n_times=1,
+                 correction=False, wait_for_steady=1.0,
+                 I_range='KBIO_IRANGE_AUTO',
+                 E_range='KBIO_ERANGE_2_5', bandwidth='KBIO_BW_5'):
+        """Initialize the PEIS technique
+
+        Args:
+            vs_initial (bool): Whether the voltage step is vs. the initial one
+            vs_final (bool): Whether the voltage step is vs. the final one
+            initial_step_voltage (float): The initial step voltage (V)
+            final_step_voltage (float): The final step voltage (V)
+            duration_step (float): Duration of step (s)
+            step_number (int): The number of voltage steps
+            record_every_dT (float): Record every dT (s)
+            record_every_dI (float): Record every dI (A)
+            final_frequency (float): The final frequency (Hz)
+            initial_frequency (float): The initial frequency (Hz)
+            sweep (bool): Sweep linear/logarithmic (True for linear points
+                spacing)
+            amplitude_voltage (float): Amplitude of sinus (V)
+            frequency_number (int): The number of frequencies
+            average_n_times (int): The number of repeat times used for
+                frequency averaging
+            correction (bool): Non-stationary correction
+            wait_for_steady (float): The number of periods to wait before each
+                frequency
+            I_Range (str): A string describing the I range, see the
+                :data:`I_RANGES` module variable for possible values
+            E_range (str): A string describing the E range to use, see the
+                :data:`E_RANGES` module variable for possible values
+            Bandwidth (str): A string describing the bandwidth setting, see the
+                :data:`BANDWIDTHS` module variable for possible values
+
+        Raises:
+            ValueError: On bad lengths for the list arguments
+        """
+        args = (
+            TechniqueArgument('vs_initial', 'bool', vs_initial,
+                              'in', [True, False]),
+            TechniqueArgument('vs_final', 'bool', vs_final,
+                              'in', [True, False]),
+            TechniqueArgument('Initial_Voltage_step', 'single',
+                              initial_voltage_step, None, None),
+            TechniqueArgument('Final_Voltage_step', 'single',
+                              final_voltage_step, None, None),
+            TechniqueArgument('Duration_step', 'single', duration_step,
+                              None, None),
+            TechniqueArgument('Step_number', 'integer', step_number,
+                              'in', range(99)),
+            TechniqueArgument('Record_every_dT', 'single', record_every_dT,
+                              '>=', 0.0),
+            TechniqueArgument('Record_every_dI', 'single', record_every_dI,
+                              '>=', 0.0),
+            TechniqueArgument('Final_frequency', 'single', final_frequency,
+                              '>=', 0.0),
+            TechniqueArgument('Initial_frequency', 'single', initial_frequency,
+                              '>=', 0.0),
+            TechniqueArgument('sweep', 'bool', sweep, 'in', [True, False]),
+            TechniqueArgument('Amplitude_Voltage', 'single', amplitude_voltage,
+                              None, None),
+            TechniqueArgument('Frequency_number', 'integer', frequency_number,
+                              '>=', 1),
+            TechniqueArgument('Average_N_times', 'integer', average_n_times,
+                              '>=', 1),
+            TechniqueArgument('Correction', 'bool', correction,
+                              'in', [True, False]),
+            TechniqueArgument('Wait_for_steady', 'single', wait_for_steady,
+                              '>=', 0.0),
+            TechniqueArgument('I_Range', I_RANGES, I_range,
+                              'in', I_RANGES.values()),
+            TechniqueArgument('E_Range', E_RANGES, E_range,
+                              'in', E_RANGES.values()),
+            TechniqueArgument('Bandwidth', BANDWIDTHS, bandwidth, 'in',
+                              BANDWIDTHS.values()),
+        )
+        super(PEIS, self).__init__(args, 'peis.ecc')
 
 # Section 7.28 in the specification
 class MIR(Technique):
@@ -2025,6 +2201,7 @@ TECHNIQUE_IDENTIFIERS_TO_CLASS = {
     'KBIO_TECHID_CV': CV,
     'KBIO_TECHID_CVA': CVA,
     'KBIO_TECHID_SPEIS': SPEIS,
+    'KBIO_TECHID_SPEIS': PEIS,
 }
 
 #:List of devices in the WMP4/SP300 series
